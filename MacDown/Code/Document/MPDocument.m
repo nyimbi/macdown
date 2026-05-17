@@ -35,6 +35,7 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 
 static NSString * const kMPDefaultAutosaveName = @"Untitled";
+@class MPPDFExportController;
 
 
 NS_INLINE NSString *MPEditorPreferenceKeyWithValueKey(NSString *key)
@@ -239,6 +240,90 @@ static NSString *MPHTMLByInjectingExportOptions(NSString *html,
 
 @end
 
+@interface MPPDFExportController : NSObject <WebFrameLoadDelegate>
+
+@property (strong) WebView *webView;
+@property (copy) NSPrintInfo *printInfo;
+@property (copy) void (^completionHandler)(BOOL, NSError *);
+@property BOOL didFinish;
+
+- (instancetype)initWithHTML:(NSString *)html
+                     baseURL:(NSURL *)baseURL
+                   outputURL:(NSURL *)outputURL
+                   printInfo:(NSPrintInfo *)printInfo
+           completionHandler:(void (^)(BOOL, NSError *))handler;
+- (void)start;
+
+@end
+
+@implementation MPPDFExportController
+{
+    NSString *_html;
+    NSURL *_baseURL;
+}
+
+- (instancetype)initWithHTML:(NSString *)html
+                     baseURL:(NSURL *)baseURL
+                   outputURL:(NSURL *)outputURL
+                   printInfo:(NSPrintInfo *)printInfo
+           completionHandler:(void (^)(BOOL, NSError *))handler
+{
+    self = [super init];
+    if (!self)
+        return nil;
+
+    _html = [html copy];
+    _baseURL = [baseURL copy];
+    _printInfo = [printInfo copy];
+    _completionHandler = [handler copy];
+    [_printInfo.dictionary addEntriesFromDictionary:@{
+        NSPrintJobDisposition: NSPrintSaveJob,
+        NSPrintJobSavingURL: outputURL,
+        NSPrintHeaderAndFooter: @NO,
+    }];
+
+    _webView = [[WebView alloc] initWithFrame:NSMakeRect(0, 0, 612, 792)];
+    _webView.frameLoadDelegate = self;
+
+    return self;
+}
+
+- (void)start
+{
+    [self.webView.mainFrame loadHTMLString:_html baseURL:_baseURL];
+}
+
+- (void)finishWithSuccess:(BOOL)success error:(NSError *)error
+{
+    if (self.didFinish)
+        return;
+    self.didFinish = YES;
+    self.webView.frameLoadDelegate = nil;
+    if (self.completionHandler)
+        self.completionHandler(success, error);
+}
+
+- (void)webView:(WebView *)sender didFinishLoadForFrame:(WebFrame *)frame
+{
+    if (frame != sender.mainFrame)
+        return;
+
+    WebFrameView *view = sender.mainFrame.frameView;
+    NSPrintOperation *operation = [view printOperationWithPrintInfo:self.printInfo];
+    operation.showsPrintPanel = NO;
+    BOOL ok = [operation runOperation];
+    [self finishWithSuccess:ok error:nil];
+}
+
+- (void)webView:(WebView *)sender didFailLoadWithError:(NSError *)error
+       forFrame:(WebFrame *)frame
+{
+    if (frame == sender.mainFrame)
+        [self finishWithSuccess:NO error:error];
+}
+
+@end
+
 
 @implementation MPPreferences (Hoedown)
 - (int)extensionFlags
@@ -332,6 +417,7 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (strong) NSArray<NSNumber *> *webViewHeaderLocations;
 @property (strong) NSArray<NSNumber *> *editorHeaderLocations;
 @property (nonatomic) BOOL inLiveScroll;
+@property (strong) MPPDFExportController *pdfExportController;
 
 // Store file content in initializer until nib is loaded.
 @property (copy) NSString *loadedString;
@@ -1452,15 +1538,26 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
             return;
         MPExportOptions *options = [controller exportOptions];
 
-        NSDictionary *settings = @{
-            NSPrintJobDisposition: NSPrintSaveJob,
-            NSPrintJobSavingURL: panel.URL,
-            NSPrintHeaderAndFooter: @(options.headerText.length ||
-                                      options.footerText.length ||
-                                      options.pageNumbersIncluded),
-        };
-        [self printDocumentWithSettings:settings showPrintPanel:NO delegate:nil
-                       didPrintSelector:NULL contextInfo:NULL];
+        [self.renderer parseAndRenderNow];
+        NSString *html = [self.renderer HTMLForExportWithStyles:options.stylesIncluded
+                                                   highlighting:options.highlightingIncluded];
+        html = MPHTMLByInjectingExportOptions(html, options);
+
+        NSURL *baseURL = self.fileURL;
+        if (!baseURL)
+            baseURL = self.preferences.htmlDefaultDirectoryUrl;
+        self.pdfExportController =
+            [[MPPDFExportController alloc] initWithHTML:html
+                                                baseURL:baseURL
+                                              outputURL:panel.URL
+                                              printInfo:self.printInfo
+                                      completionHandler:
+             ^(BOOL ok, NSError *error) {
+                self.pdfExportController = nil;
+                if (!ok && error)
+                    [self presentError:error];
+             }];
+        [self.pdfExportController start];
     }];
 }
 
