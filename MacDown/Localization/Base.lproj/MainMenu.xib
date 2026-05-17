@@ -605,6 +605,19 @@ DQ
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="eu3-7i-yIM"/>
+                            <menuItem title="Merge All Documents into Tabs" id="MPt-Ab-Mrg">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="mergeAllDocumentWindowsIntoTabs:" target="eq0-c4-vgQ" id="MPt-Ab-Mra"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Group Document Tabs by Folder" id="MPt-Ab-Grp">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="groupDocumentTabsByFolder:" target="eq0-c4-vgQ" id="MPt-Ab-Gra"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="MPt-Ab-Sep"/>
                             <menuItem title="Bring All to Front" id="LE2-aR-0XJ">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>

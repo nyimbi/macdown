@@ -132,6 +132,16 @@ Relative logo paths are resolved from the master document's folder. You can
 still override these values in the export panel before writing HTML, PDF, DOCX,
 or PPTX.
 
+### Managing many open documents
+
+On macOS versions with native window tabs, use the Window menu to reduce clutter:
+
+* **Merge All Documents into Tabs** puts every open Markdown document into one
+  tab group.
+* **Group Document Tabs by Folder** creates separate tab groups for documents
+  that live in the same folder, which is useful for books, policies, and report
+  packs made from many chapter files.
+
 ## License
 
 MacDown is released under the terms of MIT License. You may find the content of the license [here](http://opensource.org/licenses/MIT), or inside the `LICENSE` directory.

@@ -23,6 +23,10 @@
 
 
 static NSString * const kMPTreatLastSeenStampKey = @"treatLastSeenStamp";
+static NSString * const kMPAllDocumentsTabIdentifier =
+    @"com.uranusjr.macdown.tabgroup.allDocuments";
+static NSString * const kMPUntitledDocumentsTabIdentifier =
+    @"com.uranusjr.macdown.tabgroup.untitled";
 
 
 NS_INLINE void MPOpenBundledFile(NSString *resource, NSString *extension)
@@ -50,7 +54,7 @@ NS_INLINE void MPOpenBundledFile(NSString *resource, NSString *extension)
      }];
 }
 
-NS_INLINE void treat()
+NS_INLINE void treat(void)
 {
     NSDictionary *info = MPGetDataMap(@"treats");
     NSString *name = info[@"name"];
@@ -102,6 +106,8 @@ NS_INLINE void treat()
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+    [self enableNativeWindowTabbingIfAvailable];
+
     // Using private API [WebCache setDisabled:YES] to disable WebView's cache
     id webCacheClass = (id)NSClassFromString(@"WebCache");
     if (webCacheClass) {
@@ -223,6 +229,62 @@ NS_INLINE void treat()
 - (IBAction)showContributing:(id)sender
 {
     MPOpenBundledFile(@"contribute", @"md");
+}
+
+- (IBAction)mergeAllDocumentWindowsIntoTabs:(id)sender
+{
+    [self mergeWindows:[self documentWindows]
+    intoTabbedGroupWithIdentifier:kMPAllDocumentsTabIdentifier];
+}
+
+- (IBAction)groupDocumentTabsByFolder:(id)sender
+{
+    if (![self supportsNativeWindowTabbing])
+        return;
+
+    NSMutableDictionary *groups = [NSMutableDictionary dictionary];
+    NSDocumentController *controller = [NSDocumentController sharedDocumentController];
+    for (NSDocument *document in controller.documents)
+    {
+        if (![document isKindOfClass:[MPDocument class]])
+            continue;
+
+        NSURL *url = document.fileURL;
+        NSString *identifier = kMPUntitledDocumentsTabIdentifier;
+        if (url.isFileURL)
+        {
+            NSURL *folderURL = [url URLByDeletingLastPathComponent];
+            identifier = folderURL.path ?: identifier;
+        }
+
+        NSMutableArray *windows = groups[identifier];
+        if (!windows)
+        {
+            windows = [NSMutableArray array];
+            groups[identifier] = windows;
+        }
+        for (NSWindowController *windowController in document.windowControllers)
+        {
+            if (windowController.window)
+                [windows addObject:windowController.window];
+        }
+    }
+
+    for (NSString *identifier in groups)
+        [self mergeWindows:groups[identifier]
+        intoTabbedGroupWithIdentifier:identifier];
+}
+
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
+{
+    SEL action = item.action;
+    if (action == @selector(mergeAllDocumentWindowsIntoTabs:)
+            || action == @selector(groupDocumentTabsByFolder:))
+    {
+        return [self supportsNativeWindowTabbing]
+            && [self documentWindows].count > 1;
+    }
+    return YES;
 }
 
 
@@ -349,6 +411,80 @@ NS_INLINE void treat()
         self.preferences.pipedContentFileToOpen = nil;
         [self.preferences synchronize];
     }
+}
+
+- (BOOL)supportsNativeWindowTabbing
+{
+    return [NSWindow instancesRespondToSelector:@selector(addTabbedWindow:ordered:)]
+        && [NSWindow instancesRespondToSelector:@selector(setTabbingMode:)]
+        && [NSWindow instancesRespondToSelector:@selector(setTabbingIdentifier:)];
+}
+
+- (void)enableNativeWindowTabbingIfAvailable
+{
+    if (![NSWindow respondsToSelector:@selector(setAllowsAutomaticWindowTabbing:)])
+        return;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
+    [NSWindow setAllowsAutomaticWindowTabbing:YES];
+#pragma clang diagnostic pop
+}
+
+- (NSArray *)documentWindows
+{
+    NSMutableArray *windows = [NSMutableArray array];
+    NSDocumentController *controller = [NSDocumentController sharedDocumentController];
+    for (NSDocument *document in controller.documents)
+    {
+        if (![document isKindOfClass:[MPDocument class]])
+            continue;
+        for (NSWindowController *windowController in document.windowControllers)
+        {
+            if (windowController.window)
+                [windows addObject:windowController.window];
+        }
+    }
+    return windows;
+}
+
+- (void)mergeWindows:(NSArray *)windows
+intoTabbedGroupWithIdentifier:(NSString *)identifier
+{
+    if (![self supportsNativeWindowTabbing] || windows.count < 2)
+        return;
+
+    NSWindow *anchor = [self anchorWindowForWindows:windows];
+    [self configureWindow:anchor tabbingIdentifier:identifier];
+    for (NSWindow *window in windows)
+    {
+        if (window == anchor)
+            continue;
+        [self configureWindow:window tabbingIdentifier:identifier];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
+        [anchor addTabbedWindow:window ordered:NSWindowAbove];
+#pragma clang diagnostic pop
+    }
+    [anchor makeKeyAndOrderFront:nil];
+}
+
+- (NSWindow *)anchorWindowForWindows:(NSArray *)windows
+{
+    NSWindow *keyWindow = NSApp.keyWindow;
+    if ([windows containsObject:keyWindow])
+        return keyWindow;
+    return windows.firstObject;
+}
+
+- (void)configureWindow:(NSWindow *)window tabbingIdentifier:(NSString *)identifier
+{
+    if (!window)
+        return;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
+    window.tabbingMode = NSWindowTabbingModePreferred;
+    window.tabbingIdentifier = identifier ?: kMPAllDocumentsTabIdentifier;
+#pragma clang diagnostic pop
 }
 
 
