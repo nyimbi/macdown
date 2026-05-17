@@ -470,6 +470,44 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     }
 }
 
+- (void)reloadPresentedItemAfterExternalChange
+{
+    if (self.isDocumentEdited)
+    {
+        [super presentedItemDidChange];
+        return;
+    }
+
+    NSURL *url = self.fileURL;
+    if (!url)
+        url = self.presentedItemURL;
+    NSString *typeName = self.fileType;
+    if (!url || !typeName)
+    {
+        [super presentedItemDidChange];
+        return;
+    }
+
+    NSError *error = nil;
+    if (![self revertToContentsOfURL:url ofType:typeName error:&error])
+    {
+        [super presentedItemDidChange];
+        if (error)
+            [self presentError:error];
+    }
+}
+
+- (void)presentedItemDidChange
+{
+    [self performAsynchronousFileAccessUsingBlock:
+     ^(void (^fileAccessCompletionHandler)(void)) {
+        [self continueAsynchronousWorkOnMainThreadUsingBlock:^{
+            [self reloadPresentedItemAfterExternalChange];
+            fileAccessCompletionHandler();
+        }];
+    }];
+}
+
 - (void)close
 {
     if (self.needsToUnregister) 
