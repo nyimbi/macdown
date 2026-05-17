@@ -51,8 +51,7 @@ The most valuable improvements for business use are:
 * Save/export filename suggestions derived from front matter titles.
 * Reusable chapter files for books, manuals, policies, and knowledge bases.
 * A compact export style for dense operational reports.
-* A clear path to future business controls such as approvals, templates, and
-  tracked-review workflows.
+* Native document tab grouping for large books, policies, and report packs.
 
 ### Master documents and includes
 
