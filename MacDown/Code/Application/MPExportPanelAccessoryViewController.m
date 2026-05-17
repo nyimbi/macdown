@@ -14,6 +14,11 @@
 @property (strong) NSButton *stylesButton;
 @property (strong) NSButton *highlightingButton;
 @property (strong) NSButton *pageNumbersButton;
+@property (strong) NSButton *coverPageButton;
+@property (strong) NSPopUpButton *layoutPopUpButton;
+@property (strong) NSTextField *documentTitleField;
+@property (strong) NSTextField *subtitleField;
+@property (strong) NSTextField *authorField;
 @property (strong) NSTextField *headerField;
 @property (strong) NSTextField *footerField;
 @property (strong) NSTextField *logoField;
@@ -28,6 +33,11 @@
     BOOL _stylesIncluded;
     BOOL _highlightingIncluded;
     BOOL _pageNumbersIncluded;
+    BOOL _coverPageIncluded;
+    MPExportLayoutStyle _layoutStyle;
+    NSString *_documentTitle;
+    NSString *_subtitleText;
+    NSString *_authorName;
     NSString *_headerText;
     NSString *_footerText;
     NSString *_logoPath;
@@ -45,6 +55,8 @@
     _stylesIncluded = options.stylesIncluded;
     _highlightingIncluded = options.highlightingIncluded;
     _pageNumbersIncluded = options.pageNumbersIncluded;
+    _coverPageIncluded = options.coverPageIncluded;
+    _layoutStyle = options.layoutStyle;
     _brandColor = [options.brandColor copy];
 
     return self;
@@ -52,47 +64,73 @@
 
 - (void)loadView
 {
-    NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 252)];
+    NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 460, 382)];
     view.autoresizingMask = NSViewWidthSizable;
 
-    CGFloat y = 222;
+    CGFloat y = 348;
+    [view addSubview:[self labelWithTitle:@"Layout" frame:NSMakeRect(0, y + 3, 100, 17)]];
+    self.layoutPopUpButton = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(110, y, 170, 26)
+                                                        pullsDown:NO];
+    [self.layoutPopUpButton addItemsWithTitles:@[
+        [MPExportOptions displayNameForLayoutStyle:MPExportLayoutStyleModern],
+        [MPExportOptions displayNameForLayoutStyle:MPExportLayoutStyleClassic],
+        [MPExportOptions displayNameForLayoutStyle:MPExportLayoutStyleCompact],
+    ]];
+    [view addSubview:self.layoutPopUpButton];
+
+    y -= 34;
     self.stylesButton = [self checkboxWithTitle:@"Include styles"
                                           frame:NSMakeRect(0, y, 190, 20)];
     self.highlightingButton = [self checkboxWithTitle:@"Include syntax highlighting"
-                                                frame:NSMakeRect(200, y, 220, 20)];
+                                                frame:NSMakeRect(210, y, 240, 20)];
     y -= 28;
     self.pageNumbersButton = [self checkboxWithTitle:@"Page numbers"
                                                frame:NSMakeRect(0, y, 190, 20)];
+    self.coverPageButton = [self checkboxWithTitle:@"Cover page"
+                                             frame:NSMakeRect(210, y, 190, 20)];
 
-    self.headerField = [self textFieldWithFrame:NSMakeRect(110, y - 36, 310, 22)];
-    [view addSubview:[self labelWithTitle:@"Header" frame:NSMakeRect(0, y - 33, 100, 17)]];
+    self.documentTitleField = [self textFieldWithFrame:NSMakeRect(110, y - 36, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Title" frame:NSMakeRect(0, y - 33, 100, 17)]];
+    [view addSubview:self.documentTitleField];
+
+    self.subtitleField = [self textFieldWithFrame:NSMakeRect(110, y - 66, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Subtitle" frame:NSMakeRect(0, y - 63, 100, 17)]];
+    [view addSubview:self.subtitleField];
+
+    self.authorField = [self textFieldWithFrame:NSMakeRect(110, y - 96, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Author" frame:NSMakeRect(0, y - 93, 100, 17)]];
+    [view addSubview:self.authorField];
+
+    self.headerField = [self textFieldWithFrame:NSMakeRect(110, y - 126, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Header" frame:NSMakeRect(0, y - 123, 100, 17)]];
     [view addSubview:self.headerField];
 
-    self.footerField = [self textFieldWithFrame:NSMakeRect(110, y - 66, 310, 22)];
-    [view addSubview:[self labelWithTitle:@"Footer" frame:NSMakeRect(0, y - 63, 100, 17)]];
+    self.footerField = [self textFieldWithFrame:NSMakeRect(110, y - 156, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Footer" frame:NSMakeRect(0, y - 153, 100, 17)]];
     [view addSubview:self.footerField];
 
-    self.logoField = [self textFieldWithFrame:NSMakeRect(110, y - 96, 220, 22)];
-    NSButton *logoButton = [[NSButton alloc] initWithFrame:NSMakeRect(338, y - 97, 82, 24)];
+    self.logoField = [self textFieldWithFrame:NSMakeRect(110, y - 186, 250, 22)];
+    NSButton *logoButton = [[NSButton alloc] initWithFrame:NSMakeRect(368, y - 187, 82, 24)];
     logoButton.bezelStyle = NSRoundedBezelStyle;
     logoButton.title = @"Choose...";
     logoButton.target = self;
     logoButton.action = @selector(chooseLogo:);
-    [view addSubview:[self labelWithTitle:@"Logo file" frame:NSMakeRect(0, y - 93, 100, 17)]];
+    [view addSubview:[self labelWithTitle:@"Logo file" frame:NSMakeRect(0, y - 183, 100, 17)]];
     [view addSubview:self.logoField];
     [view addSubview:logoButton];
 
-    self.watermarkField = [self textFieldWithFrame:NSMakeRect(110, y - 126, 310, 22)];
-    [view addSubview:[self labelWithTitle:@"Watermark" frame:NSMakeRect(0, y - 123, 100, 17)]];
+    self.watermarkField = [self textFieldWithFrame:NSMakeRect(110, y - 216, 340, 22)];
+    [view addSubview:[self labelWithTitle:@"Watermark" frame:NSMakeRect(0, y - 213, 100, 17)]];
     [view addSubview:self.watermarkField];
 
-    self.brandColorField = [self textFieldWithFrame:NSMakeRect(110, y - 156, 130, 22)];
-    [view addSubview:[self labelWithTitle:@"Brand color" frame:NSMakeRect(0, y - 153, 100, 17)]];
+    self.brandColorField = [self textFieldWithFrame:NSMakeRect(110, y - 246, 130, 22)];
+    [view addSubview:[self labelWithTitle:@"Brand color" frame:NSMakeRect(0, y - 243, 100, 17)]];
     [view addSubview:self.brandColorField];
 
     [view addSubview:self.stylesButton];
     [view addSubview:self.highlightingButton];
     [view addSubview:self.pageNumbersButton];
+    [view addSubview:self.coverPageButton];
 
     self.view = view;
     [self syncControlsFromProperties];
@@ -147,6 +185,12 @@
         self.highlightingIncluded ? NSOnState : NSOffState;
     self.pageNumbersButton.state =
         self.pageNumbersIncluded ? NSOnState : NSOffState;
+    self.coverPageButton.state =
+        self.coverPageIncluded ? NSOnState : NSOffState;
+    [self.layoutPopUpButton selectItemAtIndex:self.layoutStyle];
+    self.documentTitleField.stringValue = self.documentTitle ?: @"";
+    self.subtitleField.stringValue = self.subtitleText ?: @"";
+    self.authorField.stringValue = self.authorName ?: @"";
     self.headerField.stringValue = self.headerText ?: @"";
     self.footerField.stringValue = self.footerText ?: @"";
     self.logoField.stringValue = self.logoPath ?: @"";
@@ -194,6 +238,64 @@
     _pageNumbersIncluded = pageNumbersIncluded;
     if (self.pageNumbersButton)
         self.pageNumbersButton.state = pageNumbersIncluded ? NSOnState : NSOffState;
+}
+
+- (BOOL)isCoverPageIncluded
+{
+    if (self.coverPageButton)
+        return self.coverPageButton.state == NSOnState;
+    return _coverPageIncluded;
+}
+
+- (void)setCoverPageIncluded:(BOOL)coverPageIncluded
+{
+    _coverPageIncluded = coverPageIncluded;
+    if (self.coverPageButton)
+        self.coverPageButton.state = coverPageIncluded ? NSOnState : NSOffState;
+}
+
+- (MPExportLayoutStyle)layoutStyle
+{
+    if (self.layoutPopUpButton)
+        return (MPExportLayoutStyle)self.layoutPopUpButton.indexOfSelectedItem;
+    return _layoutStyle;
+}
+
+- (void)setLayoutStyle:(MPExportLayoutStyle)layoutStyle
+{
+    _layoutStyle = layoutStyle;
+    if (self.layoutPopUpButton)
+        [self.layoutPopUpButton selectItemAtIndex:layoutStyle];
+}
+
+- (NSString *)documentTitle
+{
+    return [self stringValueForField:self.documentTitleField fallback:_documentTitle];
+}
+
+- (void)setDocumentTitle:(NSString *)documentTitle
+{
+    [self setString:documentTitle onField:self.documentTitleField store:&_documentTitle];
+}
+
+- (NSString *)subtitleText
+{
+    return [self stringValueForField:self.subtitleField fallback:_subtitleText];
+}
+
+- (void)setSubtitleText:(NSString *)subtitleText
+{
+    [self setString:subtitleText onField:self.subtitleField store:&_subtitleText];
+}
+
+- (NSString *)authorName
+{
+    return [self stringValueForField:self.authorField fallback:_authorName];
+}
+
+- (void)setAuthorName:(NSString *)authorName
+{
+    [self setString:authorName onField:self.authorField store:&_authorName];
 }
 
 - (NSString *)headerText
@@ -266,6 +368,11 @@
     options.stylesIncluded = self.stylesIncluded;
     options.highlightingIncluded = self.highlightingIncluded;
     options.pageNumbersIncluded = self.pageNumbersIncluded;
+    options.coverPageIncluded = self.coverPageIncluded;
+    options.layoutStyle = self.layoutStyle;
+    options.documentTitle = self.documentTitle;
+    options.subtitleText = self.subtitleText;
+    options.authorName = self.authorName;
     options.headerText = self.headerText;
     options.footerText = self.footerText;
     options.logoPath = self.logoPath;

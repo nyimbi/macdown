@@ -26,6 +26,9 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
 
 @interface MPOfficeSlide : NSObject
 @property (copy) NSString *title;
+@property (copy) NSString *subtitle;
+@property (copy) NSString *author;
+@property BOOL coverSlide;
 @property (strong) NSMutableArray *lines;
 @end
 
@@ -123,8 +126,10 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"_rels/.rels": [self rootRelationshipsForOfficeDocument:@"word/document.xml"],
         @"docProps/core.xml": [self corePropertiesWithTitle:title],
         @"docProps/app.xml": [self appPropertiesForApplication:@"MacDown"],
-        @"word/document.xml": [self docxDocumentXMLForMarkdown:markdown options:options],
-        @"word/styles.xml": [self docxStylesXML],
+        @"word/document.xml": [self docxDocumentXMLForMarkdown:markdown
+                                                         title:title
+                                                       options:options],
+        @"word/styles.xml": [self docxStylesXMLWithOptions:options],
         @"word/settings.xml": @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"/>",
         @"word/_rels/document.xml.rels": [self docxDocumentRelationshipsWithLogo:logoRelationship],
         @"word/header1.xml": [self docxHeaderXMLWithOptions:options hasLogo:(logoExtension != nil)],
@@ -161,7 +166,7 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
             return NO;
     }
 
-    NSArray *slides = [self slidesFromMarkdown:markdown title:title];
+    NSArray *slides = [self slidesFromMarkdown:markdown title:title options:options];
     NSMutableDictionary *files = [NSMutableDictionary dictionaryWithDictionary:@{
         @"[Content_Types].xml": [self pptxContentTypesForSlideCount:slides.count
                                                        logoExtension:logoExtension],
@@ -227,9 +232,12 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
 }
 
 + (NSString *)docxDocumentXMLForMarkdown:(NSString *)markdown
+                                   title:(NSString *)title
                                  options:(MPExportOptions *)options
 {
     NSMutableString *body = [NSMutableString string];
+    if (options.coverPageIncluded)
+        [body appendString:[self docxCoverPageXMLWithTitle:title options:options]];
     for (MPOfficeBlock *block in [self blocksFromMarkdown:markdown])
         [body appendString:[self docxParagraphForBlock:block options:options]];
 
@@ -243,6 +251,30 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"<w:pgSz w:w=\"12240\" w:h=\"15840\"/>"
         @"<w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/>"
         @"</w:sectPr></w:body></w:document>", body];
+}
+
++ (NSString *)docxCoverPageXMLWithTitle:(NSString *)title
+                                options:(MPExportOptions *)options
+{
+    NSMutableString *cover = [NSMutableString string];
+    NSString *coverTitle = [self effectiveTitleForTitle:title options:options];
+    [cover appendFormat:
+     @"<w:p><w:pPr><w:pStyle w:val=\"CoverTitle\"/><w:spacing w:before=\"2200\" w:after=\"260\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+     [self xmlEscape:coverTitle]];
+    if ([self stringHasContent:options.subtitleText])
+    {
+        [cover appendFormat:
+         @"<w:p><w:pPr><w:pStyle w:val=\"CoverSubtitle\"/><w:spacing w:after=\"520\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+         [self xmlEscape:options.subtitleText]];
+    }
+    if ([self stringHasContent:options.authorName])
+    {
+        [cover appendFormat:
+         @"<w:p><w:pPr><w:pStyle w:val=\"CoverMeta\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+         [self xmlEscape:options.authorName]];
+    }
+    [cover appendString:@"<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"];
+    return cover;
 }
 
 + (NSString *)docxParagraphForBlock:(MPOfficeBlock *)block
@@ -327,16 +359,20 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"</v:shape></w:pict></w:r></w:p>", [self xmlEscape:text]];
 }
 
-+ (NSString *)docxStylesXML
++ (NSString *)docxStylesXMLWithOptions:(MPExportOptions *)options
 {
-    return
+    NSString *brand = [self colorHexWithoutHash:options.brandColor];
+    return [NSString stringWithFormat:
         @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         @"<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
-        @"<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:rPr><w:sz w:val=\"22\"/></w:rPr></w:style>"
-        @"<w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/><w:basedOn w:val=\"Normal\"/><w:rPr><w:b/><w:sz w:val=\"36\"/></w:rPr></w:style>"
-        @"<w:style w:type=\"paragraph\" w:styleId=\"Heading2\"><w:name w:val=\"heading 2\"/><w:basedOn w:val=\"Normal\"/><w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:styleId=\"CoverTitle\"><w:name w:val=\"Cover Title\"/><w:rPr><w:b/><w:color w:val=\"111827\"/><w:sz w:val=\"64\"/></w:rPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:styleId=\"CoverSubtitle\"><w:name w:val=\"Cover Subtitle\"/><w:rPr><w:color w:val=\"4B5563\"/><w:sz w:val=\"30\"/></w:rPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:styleId=\"CoverMeta\"><w:name w:val=\"Cover Meta\"/><w:rPr><w:caps/><w:color w:val=\"6B7280\"/><w:sz w:val=\"20\"/></w:rPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:rPr><w:sz w:val=\"22\"/></w:rPr><w:pPr><w:spacing w:after=\"160\" w:line=\"320\" w:lineRule=\"auto\"/></w:pPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:spacing w:before=\"420\" w:after=\"160\"/></w:pPr><w:rPr><w:b/><w:color w:val=\"%@\"/><w:sz w:val=\"38\"/></w:rPr></w:style>"
+        @"<w:style w:type=\"paragraph\" w:styleId=\"Heading2\"><w:name w:val=\"heading 2\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:spacing w:before=\"300\" w:after=\"120\"/></w:pPr><w:rPr><w:b/><w:color w:val=\"111827\"/><w:sz w:val=\"28\"/></w:rPr></w:style>"
         @"<w:style w:type=\"paragraph\" w:styleId=\"Code\"><w:name w:val=\"Code\"/><w:basedOn w:val=\"Normal\"/><w:rPr><w:rFonts w:ascii=\"Menlo\" w:hAnsi=\"Menlo\"/><w:sz w:val=\"20\"/></w:rPr></w:style>"
-        @"</w:styles>";
+        @"</w:styles>", brand];
 }
 
 #pragma mark - PPTX XML
@@ -399,6 +435,12 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
                slideNumber:(NSUInteger)slideNumber
                    hasLogo:(BOOL)hasLogo
 {
+    if (slide.coverSlide)
+        return [self pptxCoverSlideXML:slide
+                               options:options
+                           slideNumber:slideNumber
+                               hasLogo:hasLogo];
+
     NSMutableString *shapes = [NSMutableString string];
     [shapes appendFormat:@"%@%@",
      [self pptxTextBoxWithId:2 text:slide.title x:685800 y:457200
@@ -434,6 +476,39 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"%@\"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>"
         @"%@</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>",
         [self colorHexWithoutHash:options.brandColor], shapes];
+}
+
++ (NSString *)pptxCoverSlideXML:(MPOfficeSlide *)slide
+                         options:(MPExportOptions *)options
+                     slideNumber:(NSUInteger)slideNumber
+                         hasLogo:(BOOL)hasLogo
+{
+    NSMutableString *shapes = [NSMutableString string];
+    [shapes appendString:[self pptxFullBleedBackgroundWithColor:
+                          [self paleColorForBrand:options.brandColor]]];
+    [shapes appendString:[self pptxAccentBlockWithOptions:options]];
+    [shapes appendString:[self pptxTextBoxWithId:2 text:slide.title
+                                               x:850000 y:2100000
+                                              cx:8800000 cy:900000
+                                        fontSize:4600 bold:YES]];
+    if ([self stringHasContent:slide.subtitle])
+    {
+        [shapes appendString:[self pptxTextBoxWithId:3 text:slide.subtitle
+                                                   x:850000 y:3100000
+                                                  cx:7600000 cy:520000
+                                            fontSize:2100 bold:NO]];
+    }
+    if ([self stringHasContent:slide.author])
+    {
+        [shapes appendString:[self pptxTextBoxWithId:4 text:slide.author
+                                                   x:850000 y:5600000
+                                                  cx:5600000 cy:300000
+                                            fontSize:1300 bold:NO]];
+    }
+    if (hasLogo)
+        [shapes appendString:[self pptxLogoPicture]];
+
+    return [self pptxSlideWithShapes:shapes options:options];
 }
 
 + (NSString *)pptxBodyLines:(NSArray *)lines
@@ -489,6 +564,37 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"<p:blipFill><a:blip r:embed=\"rIdLogo\"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>"
         @"<p:spPr><a:xfrm><a:off x=\"10400000\" y=\"250000\"/><a:ext cx=\"1200000\" cy=\"500000\"/></a:xfrm>"
         @"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>";
+}
+
++ (NSString *)pptxFullBleedBackgroundWithColor:(NSString *)color
+{
+    return [NSString stringWithFormat:
+        @"<p:sp><p:nvSpPr><p:cNvPr id=\"91\" name=\"Background\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"
+        @"<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"12192000\" cy=\"6858000\"/></a:xfrm>"
+        @"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"%@\"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>",
+        color];
+}
+
++ (NSString *)pptxAccentBlockWithOptions:(MPExportOptions *)options
+{
+    return [NSString stringWithFormat:
+        @"<p:sp><p:nvSpPr><p:cNvPr id=\"92\" name=\"Accent\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"
+        @"<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"450000\" cy=\"6858000\"/></a:xfrm>"
+        @"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"%@\"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>",
+        [self colorHexWithoutHash:options.brandColor]];
+}
+
++ (NSString *)pptxSlideWithShapes:(NSString *)shapes options:(MPExportOptions *)options
+{
+    return [NSString stringWithFormat:
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+        @"xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
+        @"xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+        @"<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
+        @"<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>"
+        @"%@</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>",
+        shapes];
 }
 
 #pragma mark - Parsing
@@ -569,18 +675,30 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
     return blocks;
 }
 
-+ (NSArray *)slidesFromMarkdown:(NSString *)markdown title:(NSString *)title
++ (NSArray *)slidesFromMarkdown:(NSString *)markdown
+                           title:(NSString *)title
+                         options:(MPExportOptions *)options
 {
     NSMutableArray *slides = [NSMutableArray array];
     MPOfficeSlide *current = [[MPOfficeSlide alloc] init];
-    current.title = [self stringHasContent:title] ? title : @"MacDown Export";
+    current.title = [self effectiveTitleForTitle:title options:options];
+    if (options.coverPageIncluded)
+    {
+        MPOfficeSlide *cover = [[MPOfficeSlide alloc] init];
+        cover.coverSlide = YES;
+        cover.title = [self effectiveTitleForTitle:title options:options];
+        cover.subtitle = options.subtitleText;
+        cover.author = options.authorName;
+        [slides addObject:cover];
+    }
 
     for (MPOfficeBlock *block in [self blocksFromMarkdown:markdown])
     {
         if (block.type == MPOfficeBlockTypeHeading1 ||
             block.type == MPOfficeBlockTypeHeading2)
         {
-            if (!current.lines.count && !slides.count)
+            if (!current.lines.count &&
+                (!slides.count || (slides.count == 1 && options.coverPageIncluded)))
             {
                 current.title = block.text;
                 continue;
@@ -597,7 +715,7 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
             {
                 [slides addObject:current];
                 current = [[MPOfficeSlide alloc] init];
-                current.title = [self stringHasContent:title] ? title : @"Continued";
+                current.title = [self effectiveTitleForTitle:title options:options];
             }
         }
     }
@@ -689,6 +807,23 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
 {
     return [value stringByTrimmingCharactersInSet:
             [NSCharacterSet whitespaceAndNewlineCharacterSet]].length > 0;
+}
+
++ (NSString *)effectiveTitleForTitle:(NSString *)title options:(MPExportOptions *)options
+{
+    if ([self stringHasContent:options.documentTitle])
+        return options.documentTitle;
+    if ([self stringHasContent:title])
+        return title;
+    return @"MacDown Export";
+}
+
++ (NSString *)paleColorForBrand:(NSString *)brand
+{
+    NSString *color = [self colorHexWithoutHash:brand];
+    if ([color isEqualToString:@"3A6EA5"])
+        return @"F1F6FB";
+    return @"F7F9FC";
 }
 
 + (NSString *)supportedImageExtensionForPath:(NSString *)path

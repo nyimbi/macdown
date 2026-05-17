@@ -128,6 +128,51 @@ NS_INLINE NSString *MPExportBrandColor(MPExportOptions *options)
     return options.brandColor;
 }
 
+NS_INLINE NSString *MPExportTitle(MPExportOptions *options)
+{
+    if (MPExportStringHasContent(options.documentTitle))
+        return options.documentTitle;
+    if (MPExportStringHasContent(options.headerText))
+        return options.headerText;
+    return @"MacDown Export";
+}
+
+NS_INLINE NSString *MPExportLayoutCSS(MPExportOptions *options)
+{
+    switch (options.layoutStyle)
+    {
+        case MPExportLayoutStyleClassic:
+            return
+                @"body{max-width:720px;margin:0 auto;padding:64px 0 52px;"
+                @"font:16px/1.7 Georgia,Times,\"Times New Roman\",serif;color:#1f2933;}"
+                @"h1,h2,h3{font-family:Georgia,Times,\"Times New Roman\",serif;color:#111827;}"
+                @"h1{font-size:34px;border-bottom:2px solid var(--macdown-export-brand);padding-bottom:10px;}"
+                @"h2{font-size:24px;margin-top:34px;}p{margin:0 0 15px;}"
+                @"blockquote{border-left:4px solid var(--macdown-export-brand);margin:22px 0;padding:8px 18px;color:#46515f;background:#f7f7f4;}"
+                @"code,pre{font-family:Menlo,Consolas,monospace;}pre{background:#f6f2ea;padding:16px;border-radius:3px;overflow:auto;}"
+                @"table{border-collapse:collapse;width:100%;margin:22px 0;}th{background:#f4f1ea;}th,td{border:1px solid #d8d2c6;padding:8px 10px;}";
+        case MPExportLayoutStyleCompact:
+            return
+                @"body{max-width:900px;margin:0 auto;padding:46px 0 38px;"
+                @"font:13px/1.45 -apple-system,BlinkMacSystemFont,\"Helvetica Neue\",Arial,sans-serif;color:#17202a;}"
+                @"h1{font-size:24px;margin:22px 0 12px;color:var(--macdown-export-brand);}"
+                @"h2{font-size:18px;margin:20px 0 8px;}h3{font-size:15px;margin:16px 0 6px;}p{margin:0 0 9px;}"
+                @"pre{background:#f5f7fa;padding:10px;border-left:3px solid var(--macdown-export-brand);overflow:auto;}"
+                @"table{border-collapse:collapse;width:100%;margin:14px 0;}th,td{border-bottom:1px solid #d9e0e7;padding:5px 7px;}";
+        case MPExportLayoutStyleModern:
+        default:
+            return
+                @"body{max-width:760px;margin:0 auto;padding:68px 0 56px;"
+                @"font:15px/1.65 -apple-system,BlinkMacSystemFont,\"Helvetica Neue\",Arial,sans-serif;color:#202832;}"
+                @"h1{font-size:36px;line-height:1.1;margin:32px 0 18px;color:#111827;}"
+                @"h1:after{content:\"\";display:block;width:72px;height:4px;background:var(--macdown-export-brand);margin-top:14px;border-radius:2px;}"
+                @"h2{font-size:23px;margin:34px 0 12px;color:#152238;}h3{font-size:18px;margin:24px 0 8px;}p{margin:0 0 13px;}"
+                @"a{color:var(--macdown-export-brand);}blockquote{margin:24px 0;padding:12px 18px;border-left:4px solid var(--macdown-export-brand);background:#f4f7fb;color:#374151;}"
+                @"pre{background:#111827;color:#f9fafb;padding:16px;border-radius:6px;overflow:auto;}code{font-family:Menlo,Consolas,monospace;}"
+                @"table{border-collapse:collapse;width:100%;margin:22px 0;box-shadow:0 1px 0 #e5e7eb;}th{background:#f1f5f9;color:#111827;}th,td{border-bottom:1px solid #e5e7eb;padding:8px 10px;}";
+    }
+}
+
 NS_INLINE NSString *MPExportFileURLString(NSString *path)
 {
     if (!MPExportStringHasContent(path))
@@ -143,22 +188,27 @@ static NSString *MPHTMLByInjectingExportOptions(NSString *html,
     NSString *color = MPExportHTMLEscape(MPExportBrandColor(options));
     NSMutableString *style = [NSMutableString stringWithFormat:
         @"<style>"
-        @":root{--macdown-export-brand:%@;}"
+        @":root{--macdown-export-brand:%@;}%@"
         @".macdown-export-header,.macdown-export-footer{"
-        @"position:fixed;left:0;right:0;z-index:9999;"
+        @"position:fixed;left:0;right:0;z-index:9999;box-sizing:border-box;"
         @"font:11px -apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;"
-        @"color:#555;}"
-        @".macdown-export-header{top:0;border-bottom:2px solid var(--macdown-export-brand);padding:8px 0 6px;}"
-        @".macdown-export-footer{bottom:0;border-top:1px solid #bbb;padding:6px 0 8px;}"
-        @".macdown-export-logo{position:fixed;top:10px;right:0;max-height:36px;max-width:140px;z-index:10000;}"
+        @"color:#4b5563;background:rgba(255,255,255,.92);}"
+        @".macdown-export-header{top:0;border-bottom:2px solid var(--macdown-export-brand);padding:9px 18px 7px;}"
+        @".macdown-export-footer{bottom:0;border-top:1px solid #d1d5db;padding:7px 18px 9px;}"
+        @".macdown-export-logo{position:fixed;top:9px;right:18px;max-height:36px;max-width:140px;z-index:10000;}"
         @".macdown-export-watermark{position:fixed;top:42%%;left:6%%;right:6%%;z-index:0;"
         @"font:700 72px -apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;"
         @"color:rgba(120,120,120,.16);text-align:center;transform:rotate(-28deg);"
         @"letter-spacing:.08em;}"
-        @"body{padding-top:48px;padding-bottom:44px;}"
+        @".macdown-export-cover{min-height:82vh;display:flex;flex-direction:column;justify-content:center;"
+        @"border-top:9px solid var(--macdown-export-brand);margin:0 0 44px;padding:56px 0 72px;page-break-after:always;}"
+        @".macdown-export-cover-logo{max-height:72px;max-width:220px;margin-bottom:44px;}"
+        @".macdown-export-cover-title{font:700 46px/1.06 -apple-system,BlinkMacSystemFont,\"Helvetica Neue\",Arial,sans-serif;color:#111827;margin:0 0 18px;}"
+        @".macdown-export-cover-subtitle{font-size:20px;color:#4b5563;margin:0 0 32px;}"
+        @".macdown-export-cover-meta{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;}"
         @"@media print{body{padding-top:56px;padding-bottom:50px;}"
         @".macdown-export-page-number:after{content:counter(page);}}"
-        @"</style>", color];
+        @"</style>", color, MPExportLayoutCSS(options)];
 
     NSMutableString *chrome = [NSMutableString string];
     if (MPExportStringHasContent(options.headerText))
@@ -177,6 +227,23 @@ static NSString *MPHTMLByInjectingExportOptions(NSString *html,
     {
         [chrome appendFormat:@"<div class=\"macdown-export-watermark\">%@</div>",
          MPExportHTMLEscape(options.watermarkText)];
+    }
+    if (options.coverPageIncluded)
+    {
+        NSString *logoURL = MPExportFileURLString(options.logoPath);
+        [chrome appendString:@"<section class=\"macdown-export-cover\">"];
+        if (logoURL)
+            [chrome appendFormat:@"<img class=\"macdown-export-cover-logo\" src=\"%@\">",
+             MPExportHTMLEscape(logoURL)];
+        [chrome appendFormat:@"<h1 class=\"macdown-export-cover-title\">%@</h1>",
+         MPExportHTMLEscape(MPExportTitle(options))];
+        if (MPExportStringHasContent(options.subtitleText))
+            [chrome appendFormat:@"<p class=\"macdown-export-cover-subtitle\">%@</p>",
+             MPExportHTMLEscape(options.subtitleText)];
+        if (MPExportStringHasContent(options.authorName))
+            [chrome appendFormat:@"<div class=\"macdown-export-cover-meta\">%@</div>",
+             MPExportHTMLEscape(options.authorName)];
+        [chrome appendString:@"</section>"];
     }
     if (MPExportStringHasContent(options.footerText) ||
         options.pageNumbersIncluded)
@@ -1497,6 +1564,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [[MPExportPanelAccessoryViewController alloc] init];
     controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
     controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
+    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
     controller.headerText = [self rendererHTMLTitle:self.renderer];
     panel.accessoryView = controller.view;
 
@@ -1525,6 +1593,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [[MPExportPanelAccessoryViewController alloc] init];
     controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
     controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
+    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
     controller.headerText = [self rendererHTMLTitle:self.renderer];
     panel.accessoryView = controller.view;
     
@@ -1570,6 +1639,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
     MPExportPanelAccessoryViewController *controller =
         [[MPExportPanelAccessoryViewController alloc] init];
+    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
     controller.headerText = [self rendererHTMLTitle:self.renderer];
     panel.accessoryView = controller.view;
 
@@ -1598,6 +1668,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
     MPExportPanelAccessoryViewController *controller =
         [[MPExportPanelAccessoryViewController alloc] init];
+    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
     controller.headerText = [self rendererHTMLTitle:self.renderer];
     panel.accessoryView = controller.view;
 
