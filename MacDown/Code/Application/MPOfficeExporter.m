@@ -259,21 +259,27 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
     NSMutableString *cover = [NSMutableString string];
     NSString *coverTitle = [self effectiveTitleForTitle:title options:options];
     [cover appendFormat:
-     @"<w:p><w:pPr><w:pStyle w:val=\"CoverTitle\"/><w:spacing w:before=\"2200\" w:after=\"260\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+     @"<w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:before=\"2600\" w:after=\"300\"/></w:pPr>"
+     @"<w:r><w:rPr><w:b/><w:color w:val=\"111827\"/><w:sz w:val=\"68\"/></w:rPr><w:t>%@</w:t></w:r></w:p>",
      [self xmlEscape:coverTitle]];
     if ([self stringHasContent:options.subtitleText])
     {
         [cover appendFormat:
-         @"<w:p><w:pPr><w:pStyle w:val=\"CoverSubtitle\"/><w:spacing w:after=\"520\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+         @"<w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:after=\"520\"/></w:pPr>"
+         @"<w:r><w:rPr><w:color w:val=\"4B5563\"/><w:sz w:val=\"30\"/></w:rPr><w:t>%@</w:t></w:r></w:p>",
          [self xmlEscape:options.subtitleText]];
     }
     if ([self stringHasContent:options.authorName])
     {
         [cover appendFormat:
-         @"<w:p><w:pPr><w:pStyle w:val=\"CoverMeta\"/></w:pPr><w:r><w:t>%@</w:t></w:r></w:p>",
+         @"<w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:before=\"600\" w:after=\"1000\"/></w:pPr>"
+         @"<w:r><w:rPr><w:caps/><w:color w:val=\"6B7280\"/><w:sz w:val=\"20\"/></w:rPr><w:t>%@</w:t></w:r></w:p>",
          [self xmlEscape:options.authorName]];
     }
-    [cover appendString:@"<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"];
+    [cover appendFormat:
+     @"<w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:before=\"400\" w:after=\"900\"/></w:pPr>"
+     @"<w:r><w:rPr><w:color w:val=\"%@\"/><w:sz w:val=\"18\"/></w:rPr><w:t>━━━</w:t></w:r></w:p>",
+     [self colorHexWithoutHash:options.brandColor]];
     return cover;
 }
 
@@ -281,17 +287,33 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
                             options:(MPExportOptions *)options
 {
     NSString *style = @"Normal";
+    NSString *runFormatting = @"<w:sz w:val=\"22\"/>";
+    NSString *paragraphFormatting = @"<w:spacing w:after=\"160\" w:line=\"320\" w:lineRule=\"auto\"/>";
     if (block.type == MPOfficeBlockTypeHeading1)
+    {
         style = @"Heading1";
+        runFormatting = [NSString stringWithFormat:
+                         @"<w:b/><w:color w:val=\"%@\"/><w:sz w:val=\"38\"/>",
+                         [self colorHexWithoutHash:options.brandColor]];
+        paragraphFormatting = @"<w:spacing w:before=\"420\" w:after=\"160\"/><w:pBdr><w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"D8DEE9\"/></w:pBdr>";
+    }
     else if (block.type == MPOfficeBlockTypeHeading2)
+    {
         style = @"Heading2";
+        runFormatting = @"<w:b/><w:color w:val=\"111827\"/><w:sz w:val=\"30\"/>";
+        paragraphFormatting = @"<w:spacing w:before=\"300\" w:after=\"120\"/>";
+    }
     else if (block.type == MPOfficeBlockTypeCode)
+    {
         style = @"Code";
+        runFormatting = @"<w:rFonts w:ascii=\"Menlo\" w:hAnsi=\"Menlo\"/><w:sz w:val=\"20\"/><w:color w:val=\"111827\"/>";
+        paragraphFormatting = @"<w:spacing w:before=\"120\" w:after=\"160\"/><w:shd w:fill=\"F3F4F6\"/>";
+    }
 
     NSString *prefix = block.type == MPOfficeBlockTypeBullet ? @"- " : @"";
     return [NSString stringWithFormat:
-        @"<w:p><w:pPr><w:pStyle w:val=\"%@\"/></w:pPr><w:r><w:t xml:space=\"preserve\">%@%@</w:t></w:r></w:p>",
-        style, prefix, [self xmlEscape:block.text]];
+        @"<w:p><w:pPr><w:pStyle w:val=\"%@\"/>%@</w:pPr><w:r><w:rPr>%@</w:rPr><w:t xml:space=\"preserve\">%@%@</w:t></w:r></w:p>",
+        style, paragraphFormatting, runFormatting, prefix, [self xmlEscape:block.text]];
 }
 
 + (NSString *)docxHeaderXMLWithOptions:(MPExportOptions *)options
