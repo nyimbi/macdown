@@ -1,15 +1,11 @@
 //
-//  MPExportPanelAccessoryViewController.h
+//  MPExportOptions.h
 //  MacDown
 //
-//  Created by Tzu-ping Chung  on 14/06/2014.
-//  Copyright (c) 2014 Tzu-ping Chung . All rights reserved.
-//
 
-#import <Cocoa/Cocoa.h>
-@class MPExportOptions;
+#import <Foundation/Foundation.h>
 
-@interface MPExportPanelAccessoryViewController : NSViewController
+@interface MPExportOptions : NSObject <NSCopying>
 
 @property (getter=isStylesIncluded) BOOL stylesIncluded;
 @property (getter=isHighlightingIncluded) BOOL highlightingIncluded;
@@ -20,6 +16,6 @@
 @property (copy) NSString *watermarkText;
 @property (copy) NSString *brandColor;
 
-- (MPExportOptions *)exportOptions;
++ (instancetype)defaultOptions;
 
 @end

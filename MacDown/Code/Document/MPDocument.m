@@ -27,6 +27,7 @@
 #import "MPPreferencesViewController.h"
 #import "MPEditorPreferencesViewController.h"
 #import "MPExportPanelAccessoryViewController.h"
+#import "MPExportOptions.h"
 #import "MPMathJaxListener.h"
 #import "WebView+WebViewPrivateHeaders.h"
 #import "MPToolbarController.h"
@@ -96,6 +97,121 @@ NS_INLINE NSColor *MPGetWebViewBackgroundColor(WebView *webview)
     DOMCSSStyleDeclaration *style = [doc getComputedStyle:bodyNode
                                             pseudoElement:nil];
     return [NSColor colorWithHTMLName:[style backgroundColor]];
+}
+
+NS_INLINE BOOL MPExportStringHasContent(NSString *value)
+{
+    return [value stringByTrimmingCharactersInSet:
+            [NSCharacterSet whitespaceAndNewlineCharacterSet]].length > 0;
+}
+
+NS_INLINE NSString *MPExportHTMLEscape(NSString *value)
+{
+    NSMutableString *escaped = [NSMutableString stringWithString:value ?: @""];
+    [escaped replaceOccurrencesOfString:@"&" withString:@"&amp;"
+                                options:0 range:NSMakeRange(0, escaped.length)];
+    [escaped replaceOccurrencesOfString:@"<" withString:@"&lt;"
+                                options:0 range:NSMakeRange(0, escaped.length)];
+    [escaped replaceOccurrencesOfString:@">" withString:@"&gt;"
+                                options:0 range:NSMakeRange(0, escaped.length)];
+    [escaped replaceOccurrencesOfString:@"\"" withString:@"&quot;"
+                                options:0 range:NSMakeRange(0, escaped.length)];
+    return escaped;
+}
+
+NS_INLINE NSString *MPExportBrandColor(MPExportOptions *options)
+{
+    if (!MPExportStringHasContent(options.brandColor))
+        return @"#3A6EA5";
+    return options.brandColor;
+}
+
+NS_INLINE NSString *MPExportFileURLString(NSString *path)
+{
+    if (!MPExportStringHasContent(path))
+        return nil;
+    NSURL *url = [NSURL fileURLWithPath:path];
+    return [url.absoluteString stringByAddingPercentEscapesUsingEncoding:
+            NSUTF8StringEncoding];
+}
+
+static NSString *MPHTMLByInjectingExportOptions(NSString *html,
+                                                MPExportOptions *options)
+{
+    NSString *color = MPExportHTMLEscape(MPExportBrandColor(options));
+    NSMutableString *style = [NSMutableString stringWithFormat:
+        @"<style>"
+        @":root{--macdown-export-brand:%@;}"
+        @".macdown-export-header,.macdown-export-footer{"
+        @"position:fixed;left:0;right:0;z-index:9999;"
+        @"font:11px -apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;"
+        @"color:#555;}"
+        @".macdown-export-header{top:0;border-bottom:2px solid var(--macdown-export-brand);padding:8px 0 6px;}"
+        @".macdown-export-footer{bottom:0;border-top:1px solid #bbb;padding:6px 0 8px;}"
+        @".macdown-export-logo{position:fixed;top:10px;right:0;max-height:36px;max-width:140px;z-index:10000;}"
+        @".macdown-export-watermark{position:fixed;top:42%%;left:6%%;right:6%%;z-index:0;"
+        @"font:700 72px -apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;"
+        @"color:rgba(120,120,120,.16);text-align:center;transform:rotate(-28deg);"
+        @"letter-spacing:.08em;}"
+        @"body{padding-top:48px;padding-bottom:44px;}"
+        @"@media print{body{padding-top:56px;padding-bottom:50px;}"
+        @".macdown-export-page-number:after{content:counter(page);}}"
+        @"</style>", color];
+
+    NSMutableString *chrome = [NSMutableString string];
+    if (MPExportStringHasContent(options.headerText))
+    {
+        [chrome appendFormat:@"<div class=\"macdown-export-header\">%@</div>",
+         MPExportHTMLEscape(options.headerText)];
+    }
+    if (MPExportStringHasContent(options.logoPath))
+    {
+        NSString *logoURL = MPExportFileURLString(options.logoPath);
+        if (logoURL)
+            [chrome appendFormat:@"<img class=\"macdown-export-logo\" src=\"%@\">",
+             MPExportHTMLEscape(logoURL)];
+    }
+    if (MPExportStringHasContent(options.watermarkText))
+    {
+        [chrome appendFormat:@"<div class=\"macdown-export-watermark\">%@</div>",
+         MPExportHTMLEscape(options.watermarkText)];
+    }
+    if (MPExportStringHasContent(options.footerText) ||
+        options.pageNumbersIncluded)
+    {
+        [chrome appendString:@"<div class=\"macdown-export-footer\">"];
+        if (MPExportStringHasContent(options.footerText))
+            [chrome appendString:MPExportHTMLEscape(options.footerText)];
+        if (options.pageNumbersIncluded)
+            [chrome appendString:
+             @"<span style=\"float:right\">Page <span class=\"macdown-export-page-number\"></span></span>"];
+        [chrome appendString:@"</div>"];
+    }
+
+    NSMutableString *result = [html mutableCopy];
+    NSRange headRange = [result rangeOfString:@"</head>"
+                                      options:NSCaseInsensitiveSearch];
+    if (headRange.location != NSNotFound)
+        [result insertString:style atIndex:headRange.location];
+    else
+        [result insertString:style atIndex:0];
+
+    NSRange bodyRange = [result rangeOfString:@"<body"
+                                      options:NSCaseInsensitiveSearch];
+    if (bodyRange.location != NSNotFound)
+    {
+        NSRange closeRange = [result rangeOfString:@">"
+                                           options:0
+                                             range:NSMakeRange(bodyRange.location,
+                                                               result.length - bodyRange.location)];
+        if (closeRange.location != NSNotFound)
+            [result insertString:chrome atIndex:closeRange.location + 1];
+    }
+    else
+    {
+        [result appendString:chrome];
+    }
+    return result;
 }
 
 
@@ -1294,16 +1410,18 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [[MPExportPanelAccessoryViewController alloc] init];
     controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
     controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
+    controller.headerText = [self rendererHTMLTitle:self.renderer];
     panel.accessoryView = controller.view;
 
     NSWindow *w = self.windowForSheet;
     [panel beginSheetModalForWindow:w completionHandler:^(NSInteger result) {
         if (result != NSFileHandlingPanelOKButton)
             return;
-        BOOL styles = controller.stylesIncluded;
-        BOOL highlighting = controller.highlightingIncluded;
-        NSString *html = [self.renderer HTMLForExportWithStyles:styles
-                                                   highlighting:highlighting];
+        MPExportOptions *options = [controller exportOptions];
+        [self.renderer parseAndRenderNow];
+        NSString *html = [self.renderer HTMLForExportWithStyles:options.stylesIncluded
+                                                   highlighting:options.highlightingIncluded];
+        html = MPHTMLByInjectingExportOptions(html, options);
         [html writeToURL:panel.URL atomically:NO encoding:NSUTF8StringEncoding
                    error:NULL];
     }];
@@ -1315,6 +1433,13 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     panel.allowedFileTypes = @[@"pdf"];
     if (self.presumedFileName)
         panel.nameFieldStringValue = self.presumedFileName;
+
+    MPExportPanelAccessoryViewController *controller =
+        [[MPExportPanelAccessoryViewController alloc] init];
+    controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
+    controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
+    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    panel.accessoryView = controller.view;
     
     NSWindow *w = nil;
     NSArray *windowControllers = self.windowControllers;
@@ -1324,10 +1449,14 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     [panel beginSheetModalForWindow:w completionHandler:^(NSInteger result) {
         if (result != NSFileHandlingPanelOKButton)
             return;
+        MPExportOptions *options = [controller exportOptions];
 
         NSDictionary *settings = @{
             NSPrintJobDisposition: NSPrintSaveJob,
             NSPrintJobSavingURL: panel.URL,
+            NSPrintHeaderAndFooter: @(options.headerText.length ||
+                                      options.footerText.length ||
+                                      options.pageNumbersIncluded),
         };
         [self printDocumentWithSettings:settings showPrintPanel:NO delegate:nil
                        didPrintSelector:NULL contextInfo:NULL];
