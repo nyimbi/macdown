@@ -51,9 +51,9 @@ If you wish to build MacDown yourself, you will need the following components/to
 
 * OS X SDK (10.14 or later)
 * Git
-* [Bundler](http://bundler.io)
+* [CocoaPods](https://cocoapods.org)
 
-> Note: Old versions of CocoaPods are not supported. Please use Bundler to execute CocoaPods, or make sure your CocoaPods is later than shown in `Gemfile.lock`.
+> Note: Old versions of CocoaPods are not supported. Please use the latest CocoaPods available on your system.
 
 > Note: The Command Line Tools (CLT) should be unnecessary. If you failed to compile without it, please install CLT with
 >
@@ -68,8 +68,7 @@ An appropriate SDK should be bundled with Xcode 5 or later versions.
 After cloning the repository, run the following commands inside the repository root (directory containing this `README.md` file):
 
     git submodule update --init
-    bundle install
-    bundle exec pod install
+    pod install
     make -C Dependency/peg-markdown-highlight
 
 and open `MacDown.xcworkspace` in Xcode. The first command initialises the dependency submodule(s) used in MacDown; the second one installs dependencies managed by CocoaPods.
@@ -77,7 +76,7 @@ and open `MacDown.xcworkspace` in Xcode. The first command initialises the depen
 Refer to the official guides of Git and CocoaPods if you need more instructions. If you run into build issues later on, try running the following commands to update dependencies:
 
     git submodule update
-    bundle exec pod install
+    pod install
 
 ### Translation
 
@@ -98,4 +97,3 @@ MacDown depends a lot on other open source projects, such as [Hoedown](https://g
 ## Tipping
 
 If you find MacDown suitable for your needs, please consider [giving me a tip through PayPal](http://macdown.uranusjr.com/faq/#donation). Or, if you prefer to buy me a drink *personally* instead, just [send me a tweet](https://twitter.com/uranusjr) when you visit [Taipei, Taiwan](http://en.wikipedia.org/wiki/Taipei), where I live. I look forward to meeting you!
-
