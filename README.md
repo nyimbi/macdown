@@ -19,6 +19,119 @@ Visit the [project site](http://macdown.uranusjr.com/) for more information, or 
 
 ![screenshot](assets/screenshot.png)
 
+## Business Documents
+
+MacDown can be used as a lightweight business-document workbench when a single
+report, proposal, policy, or book needs reusable Markdown source files and
+polished exports.
+
+### High-value business improvements
+
+The most valuable improvements for business use are:
+
+* Master documents with local includes, so teams can compose reports from
+  chapter, appendix, and reusable boilerplate files.
+* Front matter metadata for title, subtitle, author, logo, header, footer,
+  watermark, brand color, cover-page, page-numbering, and layout defaults.
+* A generated table of contents for long documents.
+* Export presets for modern, classic, and compact business layouts.
+* Cover pages for proposals, board packs, books, and client deliverables.
+* DOCX export for editable Microsoft Word handoff.
+* PPTX export for turning Markdown briefs into editable presentation drafts.
+* PDF export that uses the same branding controls as HTML export.
+* HTML export that can be shared as a self-contained review artifact.
+* Page numbering controls for printed and formal PDF/DOCX documents.
+* Header and footer controls for confidentiality labels, authorship, dates,
+  and document status.
+* Logo and brand-color controls for client-facing or internal-branded output.
+* Watermarking for draft, confidential, and internal-review deliverables.
+* Include warnings for missing or circular source files.
+* Consistent preview/export titles from document metadata.
+* Relative asset paths, so logos and includes can live next to the master file.
+* Save/export filename suggestions derived from front matter titles.
+* Reusable chapter files for books, manuals, policies, and knowledge bases.
+* A compact export style for dense operational reports.
+* A clear path to future business controls such as approvals, templates, and
+  tracked-review workflows.
+
+### Master documents and includes
+
+Create a master Markdown file and include other Markdown files with any of these
+directives:
+
+    !include chapters/introduction.md
+    {{include chapters/market-analysis.md}}
+    <!-- include: appendices/financials.md -->
+
+Include paths may be absolute, use `~`, or be relative to the file that contains
+the directive. Included files may include more files. MacDown skips circular
+includes and inserts a warning in the generated Markdown when an include cannot
+be read.
+
+For a book, keep each chapter in its own file and assemble them from a master:
+
+    ---
+    title: Operating Manual
+    subtitle: Field Edition
+    author: Operations
+    coverPage: true
+    pageNumbers: true
+    toc: true
+    layout: modern
+    ---
+
+    # Operating Manual
+
+    !include chapters/01-introduction.md
+    !include chapters/02-setup.md
+    !include chapters/03-procedures.md
+    !include appendices/a-checklists.md
+
+### Concatenating files
+
+For a quick manual concatenation outside MacDown, use the shell:
+
+    cat chapters/*.md > master.md
+
+For repeatable business documents, prefer a MacDown master file with includes.
+That keeps chapters independently editable and avoids rebuilding `master.md`
+every time a source chapter changes.
+
+### Table of contents
+
+Enable HTML table-of-contents rendering in Markdown preferences, then add this
+where the TOC should appear:
+
+    [TOC]
+
+In a master document, you can also set `toc: true` or `tableOfContents: true`
+in front matter. MacDown inserts `[TOC]` at the start of the compiled document
+when one is not already present.
+
+### Cover pages and branding
+
+Use YAML front matter at the top of the master document to prefill export
+branding:
+
+    ---
+    title: Quarterly Business Review
+    subtitle: Q4 FY26
+    author: Strategy and Operations
+    header: Confidential
+    footer: Board package
+    logo: assets/company-logo.png
+    watermark: Draft
+    brandColor: "#0F766E"
+    coverPage: true
+    pageNumbers: true
+    layout: modern
+    toc: true
+    ---
+
+Relative logo paths are resolved from the master document's folder. You can
+still override these values in the export panel before writing HTML, PDF, DOCX,
+or PPTX.
+
 ## License
 
 MacDown is released under the terms of MIT License. You may find the content of the license [here](http://opensource.org/licenses/MIT), or inside the `LICENSE` directory.

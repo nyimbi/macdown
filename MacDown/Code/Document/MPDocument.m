@@ -21,6 +21,7 @@
 #import "NSTextView+Autocomplete.h"
 #import "DOMNode+Text.h"
 #import "MPPreferences.h"
+#import "MPDocumentCompiler.h"
 #import "MPDocumentSplitView.h"
 #import "MPEditorView.h"
 #import "MPRenderer.h"
@@ -283,6 +284,65 @@ static NSString *MPHTMLByInjectingExportOptions(NSString *html,
     return result;
 }
 
+static NSURL *MPDocumentCompilationBaseURL(NSURL *fileURL,
+                                           NSURL *defaultURL)
+{
+    if (fileURL)
+        return fileURL;
+    return defaultURL;
+}
+
+static NSString *MPResolveDocumentAssetPath(NSString *path, NSURL *baseURL)
+{
+    if (!MPExportStringHasContent(path))
+        return path;
+    NSString *expanded = [path stringByExpandingTildeInPath];
+    if ([expanded isAbsolutePath])
+        return expanded;
+    NSURL *directoryURL = baseURL;
+    if (directoryURL && !directoryURL.hasDirectoryPath)
+        directoryURL = [directoryURL URLByDeletingLastPathComponent];
+    NSURL *url = [directoryURL URLByAppendingPathComponent:path];
+    if (url.isFileURL)
+        return url.absoluteURL.path;
+    return path;
+}
+
+static BOOL MPDocumentMetadataBool(NSDictionary *metadata, NSString *key,
+                                   BOOL defaultValue)
+{
+    id value = metadata[key];
+    if ([value respondsToSelector:@selector(boolValue)])
+        return [value boolValue];
+    return defaultValue;
+}
+
+static void MPApplyCompiledDocumentToExportController(
+    MPCompiledDocument *document,
+    MPExportPanelAccessoryViewController *controller,
+    NSString *fallbackTitle,
+    NSURL *baseURL)
+{
+    MPExportOptions *options = [MPExportOptions defaultOptions];
+    options.documentTitle = fallbackTitle ?: @"";
+    options.headerText = fallbackTitle ?: @"";
+    [MPDocumentCompiler applyMetadataFromCompiledDocument:document
+                                          toExportOptions:options];
+    options.logoPath = MPResolveDocumentAssetPath(options.logoPath, baseURL);
+
+    controller.documentTitle = options.documentTitle;
+    controller.subtitleText = options.subtitleText;
+    controller.authorName = options.authorName;
+    controller.headerText = options.headerText;
+    controller.footerText = options.footerText;
+    controller.logoPath = options.logoPath;
+    controller.watermarkText = options.watermarkText;
+    controller.brandColor = options.brandColor;
+    controller.coverPageIncluded = options.coverPageIncluded;
+    controller.pageNumbersIncluded = options.pageNumbersIncluded;
+    controller.layoutStyle = options.layoutStyle;
+}
+
 
 @implementation NSURL (Convert)
 
@@ -485,6 +545,7 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (strong) NSArray<NSNumber *> *editorHeaderLocations;
 @property (nonatomic) BOOL inLiveScroll;
 @property (strong) MPPDFExportController *pdfExportController;
+@property (strong) MPCompiledDocument *currentCompiledDocument;
 
 // Store file content in initializer until nib is loaded.
 @property (copy) NSString *loadedString;
@@ -544,6 +605,18 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 - (NSString *)html
 {
     return self.renderer.currentHtml;
+}
+
+- (NSURL *)compilationBaseURL
+{
+    return MPDocumentCompilationBaseURL(self.fileURL,
+                                        self.preferences.htmlDefaultDirectoryUrl);
+}
+
+- (MPCompiledDocument *)compiledDocument
+{
+    return [MPDocumentCompiler compileMarkdown:self.markdown
+                                       baseURL:self.compilationBaseURL];
 }
 
 - (BOOL)toolbarVisible
@@ -1282,13 +1355,15 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     
 - (NSString *)rendererMarkdown:(MPRenderer *)renderer
 {
-    return self.editor.string;
+    self.currentCompiledDocument = self.compiledDocument;
+    return self.currentCompiledDocument.markdown;
 }
 
 - (NSString *)rendererHTMLTitle:(MPRenderer *)renderer
 {
     NSString *n = self.fileURL.lastPathComponent.stringByDeletingPathExtension;
-    return n ? n : @"";
+    return [MPDocumentCompiler titleForCompiledDocument:self.compiledDocument
+                                               fallback:n ? n : @""];
 }
 
 
@@ -1306,7 +1381,12 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (BOOL)rendererRendersTOC:(MPRenderer *)renderer
 {
-    return self.preferences.htmlRendersTOC;
+    MPCompiledDocument *document = self.currentCompiledDocument;
+    BOOL metadataTOC = MPDocumentMetadataBool(document.metadata, @"toc", NO);
+    metadataTOC = MPDocumentMetadataBool(document.metadata,
+                                         @"tableOfContents",
+                                         metadataTOC);
+    return self.preferences.htmlRendersTOC || metadataTOC;
 }
 
 - (NSString *)rendererStyleName:(MPRenderer *)renderer
@@ -1564,8 +1644,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [[MPExportPanelAccessoryViewController alloc] init];
     controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
     controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
-    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
-    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    MPCompiledDocument *compiledDocument = self.compiledDocument;
+    NSString *title = [self rendererHTMLTitle:self.renderer];
+    MPApplyCompiledDocumentToExportController(compiledDocument, controller,
+                                              title, self.compilationBaseURL);
     panel.accessoryView = controller.view;
 
     NSWindow *w = self.windowForSheet;
@@ -1593,8 +1675,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [[MPExportPanelAccessoryViewController alloc] init];
     controller.stylesIncluded = (BOOL)self.preferences.htmlStyleName;
     controller.highlightingIncluded = self.preferences.htmlSyntaxHighlighting;
-    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
-    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    MPCompiledDocument *compiledDocument = self.compiledDocument;
+    NSString *title = [self rendererHTMLTitle:self.renderer];
+    MPApplyCompiledDocumentToExportController(compiledDocument, controller,
+                                              title, self.compilationBaseURL);
     panel.accessoryView = controller.view;
     
     NSWindow *w = nil;
@@ -1639,8 +1723,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
     MPExportPanelAccessoryViewController *controller =
         [[MPExportPanelAccessoryViewController alloc] init];
-    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
-    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    MPCompiledDocument *compiledDocument = self.compiledDocument;
+    NSString *title = [self rendererHTMLTitle:self.renderer];
+    MPApplyCompiledDocumentToExportController(compiledDocument, controller,
+                                              title, self.compilationBaseURL);
     panel.accessoryView = controller.view;
 
     NSWindow *w = self.windowForSheet;
@@ -1649,10 +1735,13 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
             return;
 
         NSError *error = nil;
+        MPCompiledDocument *compiledDocument = self.compiledDocument;
+        MPExportOptions *options = [controller exportOptions];
         BOOL ok = [MPOfficeExporter writeDOCXToURL:panel.URL
-                                          markdown:self.markdown
-                                             title:[self rendererHTMLTitle:self.renderer]
-                                           options:[controller exportOptions]
+                                          markdown:compiledDocument.markdown
+                                             title:[MPDocumentCompiler titleForCompiledDocument:compiledDocument
+                                                                                       fallback:title]
+                                           options:options
                                              error:&error];
         if (!ok && error)
             [self presentError:error];
@@ -1668,8 +1757,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
     MPExportPanelAccessoryViewController *controller =
         [[MPExportPanelAccessoryViewController alloc] init];
-    controller.documentTitle = [self rendererHTMLTitle:self.renderer];
-    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    MPCompiledDocument *compiledDocument = self.compiledDocument;
+    NSString *title = [self rendererHTMLTitle:self.renderer];
+    MPApplyCompiledDocumentToExportController(compiledDocument, controller,
+                                              title, self.compilationBaseURL);
     panel.accessoryView = controller.view;
 
     NSWindow *w = self.windowForSheet;
@@ -1678,10 +1769,13 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
             return;
 
         NSError *error = nil;
+        MPCompiledDocument *compiledDocument = self.compiledDocument;
+        MPExportOptions *options = [controller exportOptions];
         BOOL ok = [MPOfficeExporter writePPTXToURL:panel.URL
-                                          markdown:self.markdown
-                                             title:[self rendererHTMLTitle:self.renderer]
-                                           options:[controller exportOptions]
+                                          markdown:compiledDocument.markdown
+                                             title:[MPDocumentCompiler titleForCompiledDocument:compiledDocument
+                                                                                       fallback:title]
+                                           options:options
                                              error:&error];
         if (!ok && error)
             [self presentError:error];
@@ -2259,11 +2353,11 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     if (self.fileURL)
         return self.fileURL.lastPathComponent.stringByDeletingPathExtension;
 
-    NSString *title = nil;
     NSString *string = self.editor.string;
-    if (self.preferences.htmlDetectFrontMatter)
-        title = [[[string frontMatter:NULL] objectForKey:@"title"] description];
-    if (title)
+    NSString *title =
+        [MPDocumentCompiler titleForCompiledDocument:self.compiledDocument
+                                           fallback:nil];
+    if (title.length)
         return title;
 
     title = string.titleString;

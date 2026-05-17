@@ -579,7 +579,16 @@ NS_INLINE void MPFreeHTMLRenderer(hoedown_renderer *htmlRenderer)
             || [delegate rendererRendersTOC:self] != self.TOC
             || [delegate rendererDetectsFrontMatter:self] != self.frontMatter)
     {
-        [self parseMarkdown:[self.dataSource rendererMarkdown:self]];
+        __block NSString *markdown;
+        if ([NSThread isMainThread])
+            markdown = [self.dataSource rendererMarkdown:self];
+        else
+        {
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                markdown = [self.dataSource rendererMarkdown:self];
+            });
+        }
+        [self parseMarkdown:markdown];
     }
 }
 
