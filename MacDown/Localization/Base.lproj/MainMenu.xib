@@ -135,6 +135,18 @@
                                                 <action selector="exportPdf:" target="-1" id="Rhh-ni-CdX"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Word Document…" keyEquivalent="w" id="h5J-0e-fYw">
+                                            <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                            <connections>
+                                                <action selector="exportDocx:" target="-1" id="OtR-41-RxT"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="PowerPoint…" keyEquivalent="r" id="UOA-gj-JLD">
+                                            <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                            <connections>
+                                                <action selector="exportPptx:" target="-1" id="o3U-2e-m91"/>
+                                            </connections>
+                                        </menuItem>
                                     </items>
                                 </menu>
                             </menuItem>

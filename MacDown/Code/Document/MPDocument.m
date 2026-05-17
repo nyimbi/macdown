@@ -28,6 +28,7 @@
 #import "MPEditorPreferencesViewController.h"
 #import "MPExportPanelAccessoryViewController.h"
 #import "MPExportOptions.h"
+#import "MPOfficeExporter.h"
 #import "MPMathJaxListener.h"
 #import "WebView+WebViewPrivateHeaders.h"
 #import "MPToolbarController.h"
@@ -1460,6 +1461,62 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         };
         [self printDocumentWithSettings:settings showPrintPanel:NO delegate:nil
                        didPrintSelector:NULL contextInfo:NULL];
+    }];
+}
+
+- (IBAction)exportDocx:(id)sender
+{
+    NSSavePanel *panel = [NSSavePanel savePanel];
+    panel.allowedFileTypes = @[@"docx"];
+    if (self.presumedFileName)
+        panel.nameFieldStringValue = self.presumedFileName;
+
+    MPExportPanelAccessoryViewController *controller =
+        [[MPExportPanelAccessoryViewController alloc] init];
+    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    panel.accessoryView = controller.view;
+
+    NSWindow *w = self.windowForSheet;
+    [panel beginSheetModalForWindow:w completionHandler:^(NSInteger result) {
+        if (result != NSFileHandlingPanelOKButton)
+            return;
+
+        NSError *error = nil;
+        BOOL ok = [MPOfficeExporter writeDOCXToURL:panel.URL
+                                          markdown:self.markdown
+                                             title:[self rendererHTMLTitle:self.renderer]
+                                           options:[controller exportOptions]
+                                             error:&error];
+        if (!ok && error)
+            [self presentError:error];
+    }];
+}
+
+- (IBAction)exportPptx:(id)sender
+{
+    NSSavePanel *panel = [NSSavePanel savePanel];
+    panel.allowedFileTypes = @[@"pptx"];
+    if (self.presumedFileName)
+        panel.nameFieldStringValue = self.presumedFileName;
+
+    MPExportPanelAccessoryViewController *controller =
+        [[MPExportPanelAccessoryViewController alloc] init];
+    controller.headerText = [self rendererHTMLTitle:self.renderer];
+    panel.accessoryView = controller.view;
+
+    NSWindow *w = self.windowForSheet;
+    [panel beginSheetModalForWindow:w completionHandler:^(NSInteger result) {
+        if (result != NSFileHandlingPanelOKButton)
+            return;
+
+        NSError *error = nil;
+        BOOL ok = [MPOfficeExporter writePPTXToURL:panel.URL
+                                          markdown:self.markdown
+                                             title:[self rendererHTMLTitle:self.renderer]
+                                           options:[controller exportOptions]
+                                             error:&error];
+        if (!ok && error)
+            [self presentError:error];
     }];
 }
 
