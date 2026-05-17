@@ -146,7 +146,10 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
 {
     NSFileManager *manager = [NSFileManager defaultManager];
     NSArray *directories = @[@"_rels", @"docProps", @"ppt", @"ppt/_rels",
-                             @"ppt/slides", @"ppt/slides/_rels", @"ppt/media"];
+                             @"ppt/slides", @"ppt/slides/_rels", @"ppt/media",
+                             @"ppt/slideMasters", @"ppt/slideMasters/_rels",
+                             @"ppt/slideLayouts", @"ppt/slideLayouts/_rels",
+                             @"ppt/theme"];
     for (NSString *directory in directories)
     {
         NSString *path = [root stringByAppendingPathComponent:directory];
@@ -175,6 +178,11 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"docProps/app.xml": [self appPropertiesForApplication:@"MacDown"],
         @"ppt/presentation.xml": [self pptxPresentationXMLForSlideCount:slides.count],
         @"ppt/_rels/presentation.xml.rels": [self pptxPresentationRelationshipsForSlideCount:slides.count],
+        @"ppt/slideMasters/slideMaster1.xml": [self pptxSlideMasterXML],
+        @"ppt/slideMasters/_rels/slideMaster1.xml.rels": [self pptxSlideMasterRelationshipsXML],
+        @"ppt/slideLayouts/slideLayout1.xml": [self pptxSlideLayoutXML],
+        @"ppt/slideLayouts/_rels/slideLayout1.xml.rels": [self pptxSlideLayoutRelationshipsXML],
+        @"ppt/theme/theme1.xml": [self pptxThemeXMLWithOptions:options],
     }];
 
     NSUInteger index = 1;
@@ -186,16 +194,9 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
                                       options:options
                                   slideNumber:index
                                       hasLogo:(logoExtension != nil)];
-        if (logoExtension)
-        {
-            files[[NSString stringWithFormat:@"ppt/slides/_rels/slide%lu.xml.rels",
-                   (unsigned long)index]] =
-                [NSString stringWithFormat:
-                 @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                 @"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                 @"<Relationship Id=\"rIdLogo\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/logo.%@\"/>"
-                 @"</Relationships>", logoExtension];
-        }
+        files[[NSString stringWithFormat:@"ppt/slides/_rels/slide%lu.xml.rels",
+               (unsigned long)index]] =
+            [self pptxSlideRelationshipsXMLWithLogoExtension:logoExtension];
         index++;
     }
 
@@ -415,6 +416,9 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
         @"<Default Extension=\"xml\" ContentType=\"application/xml\"/>%@"
         @"<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>"
+        @"<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>"
+        @"<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>"
+        @"<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>"
         @"<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>"
         @"<Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/>%@"
         @"</Types>",
@@ -432,8 +436,11 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
         @"<p:presentation xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
         @"xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
         @"xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+        @"<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rIdMaster1\"/></p:sldMasterIdLst>"
         @"<p:sldIdLst>%@</p:sldIdLst>"
         @"<p:sldSz cx=\"12192000\" cy=\"6858000\" type=\"wide\"/>"
+        @"<p:notesSz cx=\"6858000\" cy=\"9144000\"/>"
+        @"<p:defaultTextStyle><a:defPPr><a:defRPr lang=\"en-US\"/></a:defPPr></p:defaultTextStyle>"
         @"</p:presentation>", ids];
 }
 
@@ -448,8 +455,90 @@ typedef NS_ENUM(NSInteger, MPOfficeBlockType) {
          @"<Relationship Id=\"rId%lu\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide%lu.xml\"/>",
          (unsigned long)i, (unsigned long)i];
     }
+    [rels appendString:
+     @"<Relationship Id=\"rIdMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>"];
     [rels appendString:@"</Relationships>"];
     return rels;
+}
+
++ (NSString *)pptxSlideRelationshipsXMLWithLogoExtension:(NSString *)logoExtension
+{
+    NSMutableString *rels = [NSMutableString stringWithString:
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        @"<Relationship Id=\"rIdLayout\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>"];
+    if (logoExtension)
+    {
+        [rels appendFormat:
+         @"<Relationship Id=\"rIdLogo\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/logo.%@\"/>",
+         logoExtension];
+    }
+    [rels appendString:@"</Relationships>"];
+    return rels;
+}
+
++ (NSString *)pptxSlideMasterXML
+{
+    return
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<p:sldMaster xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+        @"xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
+        @"xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+        @"<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
+        @"<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>"
+        @"</p:spTree></p:cSld>"
+        @"<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>"
+        @"<p:sldLayoutIdLst><p:sldLayoutId id=\"1\" r:id=\"rIdLayout1\"/></p:sldLayoutIdLst>"
+        @"<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>";
+}
+
++ (NSString *)pptxSlideMasterRelationshipsXML
+{
+    return
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        @"<Relationship Id=\"rIdLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>"
+        @"<Relationship Id=\"rIdTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/>"
+        @"</Relationships>";
+}
+
++ (NSString *)pptxSlideLayoutXML
+{
+    return
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<p:sldLayout xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+        @"xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
+        @"xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" type=\"blank\" preserve=\"1\">"
+        @"<p:cSld name=\"MacDown Blank\"><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
+        @"<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>"
+        @"</p:spTree></p:cSld></p:sldLayout>";
+}
+
++ (NSString *)pptxSlideLayoutRelationshipsXML
+{
+    return
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        @"<Relationship Id=\"rIdMaster\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../slideMasters/slideMaster1.xml\"/>"
+        @"</Relationships>";
+}
+
++ (NSString *)pptxThemeXMLWithOptions:(MPExportOptions *)options
+{
+    NSString *brand = [self colorHexWithoutHash:options.brandColor];
+    return [NSString stringWithFormat:
+        @"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        @"<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"MacDown Export\">"
+        @"<a:themeElements><a:clrScheme name=\"MacDown\">"
+        @"<a:dk1><a:srgbClr val=\"111827\"/></a:dk1><a:lt1><a:srgbClr val=\"FFFFFF\"/></a:lt1>"
+        @"<a:dk2><a:srgbClr val=\"374151\"/></a:dk2><a:lt2><a:srgbClr val=\"F7F9FC\"/></a:lt2>"
+        @"<a:accent1><a:srgbClr val=\"%@\"/></a:accent1><a:accent2><a:srgbClr val=\"6B7280\"/></a:accent2>"
+        @"<a:accent3><a:srgbClr val=\"D8DEE9\"/></a:accent3><a:accent4><a:srgbClr val=\"93C5FD\"/></a:accent4>"
+        @"<a:accent5><a:srgbClr val=\"F59E0B\"/></a:accent5><a:accent6><a:srgbClr val=\"10B981\"/></a:accent6>"
+        @"<a:hlink><a:srgbClr val=\"%@\"/></a:hlink><a:folHlink><a:srgbClr val=\"7C3AED\"/></a:folHlink>"
+        @"</a:clrScheme><a:fontScheme name=\"MacDown\"><a:majorFont><a:latin typeface=\"Aptos Display\"/></a:majorFont><a:minorFont><a:latin typeface=\"Aptos\"/></a:minorFont></a:fontScheme>"
+        @"<a:fmtScheme name=\"MacDown\"><a:fillStyleLst><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w=\"6350\"><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>"
+        @"</a:themeElements></a:theme>", brand, brand];
 }
 
 + (NSString *)pptxSlideXML:(MPOfficeSlide *)slide
