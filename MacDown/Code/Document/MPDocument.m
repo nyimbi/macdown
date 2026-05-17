@@ -34,6 +34,8 @@
 #import "WebView+WebViewPrivateHeaders.h"
 #import "MPToolbarController.h"
 #import <JavaScriptCore/JavaScriptCore.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static NSString * const kMPDefaultAutosaveName = @"Untitled";
 @class MPPDFExportController;
@@ -48,7 +50,7 @@ NS_INLINE NSString *MPEditorPreferenceKeyWithValueKey(NSString *key)
     return [NSString stringWithFormat:@"editor%@%@", first, rest];
 }
 
-NS_INLINE NSDictionary *MPEditorKeysToObserve()
+NS_INLINE NSDictionary *MPEditorKeysToObserve(void)
 {
     static NSDictionary *keys = nil;
     static dispatch_once_t token;
@@ -65,7 +67,7 @@ NS_INLINE NSDictionary *MPEditorKeysToObserve()
     return keys;
 }
 
-NS_INLINE NSSet *MPEditorPreferencesToObserve()
+NS_INLINE NSSet *MPEditorPreferencesToObserve(void)
 {
     static NSSet *keys = nil;
     static dispatch_once_t token;
@@ -546,6 +548,7 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (nonatomic) BOOL inLiveScroll;
 @property (strong) MPPDFExportController *pdfExportController;
 @property (strong) MPCompiledDocument *currentCompiledDocument;
+@property (nonatomic, strong) NSMutableDictionary *includedFileChangeSources;
 
 // Store file content in initializer until nib is loaded.
 @property (copy) NSString *loadedString;
@@ -556,7 +559,7 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 
 @end
 
-static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
+static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))(void)
 {
     __weak MPDocument *weakObj = doc;
     return ^{
@@ -615,8 +618,11 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (MPCompiledDocument *)compiledDocument
 {
-    return [MPDocumentCompiler compileMarkdown:self.markdown
-                                       baseURL:self.compilationBaseURL];
+    MPCompiledDocument *document =
+        [MPDocumentCompiler compileMarkdown:self.markdown
+                                    baseURL:self.compilationBaseURL];
+    [self updateIncludedFileWatchersWithURLs:document.includedFileURLs];
+    return document;
 }
 
 - (BOOL)toolbarVisible
@@ -855,6 +861,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     if (self.needsToUnregister) 
     {
+        [self stopIncludedFileWatchers];
+
         // Close can be called multiple times, but this can only be done once.
         // http://www.cocoabuilder.com/archive/cocoa/240166-nsdocument-close-method-calls-itself.html
         self.needsToUnregister = NO;
@@ -878,6 +886,99 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     }
 
     [super close];
+}
+
+- (NSMutableDictionary *)includedFileChangeSources
+{
+    if (!_includedFileChangeSources)
+        _includedFileChangeSources = [NSMutableDictionary dictionary];
+    return _includedFileChangeSources;
+}
+
+- (void)updateIncludedFileWatchersWithURLs:(NSArray *)urls
+{
+    NSMutableSet *wantedPaths = [NSMutableSet set];
+    for (NSURL *url in urls)
+    {
+        if (!url.isFileURL)
+            continue;
+        NSString *path = url.path.stringByStandardizingPath;
+        if (path.length)
+            [wantedPaths addObject:path];
+    }
+
+    NSMutableArray *stalePaths = [NSMutableArray array];
+    for (NSString *path in self.includedFileChangeSources)
+    {
+        if (![wantedPaths containsObject:path])
+            [stalePaths addObject:path];
+    }
+    for (NSString *path in stalePaths)
+        [self stopIncludedFileWatcherAtPath:path];
+
+    for (NSString *path in wantedPaths)
+    {
+        if (!self.includedFileChangeSources[path])
+            [self startIncludedFileWatcherAtPath:path];
+    }
+}
+
+- (void)startIncludedFileWatcherAtPath:(NSString *)path
+{
+    int fd = open(path.fileSystemRepresentation, O_EVTONLY);
+    if (fd < 0)
+        return;
+
+    unsigned long mask = DISPATCH_VNODE_WRITE
+        | DISPATCH_VNODE_DELETE
+        | DISPATCH_VNODE_EXTEND
+        | DISPATCH_VNODE_ATTRIB
+        | DISPATCH_VNODE_LINK
+        | DISPATCH_VNODE_RENAME
+        | DISPATCH_VNODE_REVOKE;
+    dispatch_source_t source =
+        dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fd, mask,
+                               dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
+    if (!source)
+    {
+        close(fd);
+        return;
+    }
+
+    __weak MPDocument *weakSelf = self;
+    dispatch_source_set_event_handler(source, ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf includedFileDidChangeAtPath:path];
+        });
+    });
+    dispatch_source_set_cancel_handler(source, ^{
+        close(fd);
+    });
+    self.includedFileChangeSources[path] = source;
+    dispatch_resume(source);
+}
+
+- (void)stopIncludedFileWatcherAtPath:(NSString *)path
+{
+    dispatch_source_t source = self.includedFileChangeSources[path];
+    if (!source)
+        return;
+    dispatch_source_cancel(source);
+    [self.includedFileChangeSources removeObjectForKey:path];
+}
+
+- (void)stopIncludedFileWatchers
+{
+    for (NSString *path in self.includedFileChangeSources.allKeys)
+        [self stopIncludedFileWatcherAtPath:path];
+}
+
+- (void)includedFileDidChangeAtPath:(NSString *)path
+{
+    [self stopIncludedFileWatcherAtPath:path];
+    self.currentCompiledDocument = nil;
+    if (!self.preferences.markdownManualRender)
+        [self.renderer parseAndRenderLater];
 }
 
 + (BOOL)autosavesInPlace

@@ -45,7 +45,7 @@ The most valuable improvements for business use are:
   and document status.
 * Logo and brand-color controls for client-facing or internal-branded output.
 * Watermarking for draft, confidential, and internal-review deliverables.
-* Include warnings for missing or circular source files.
+* Include warnings and preview refreshes for changed include source files.
 * Consistent preview/export titles from document metadata.
 * Relative asset paths, so logos and includes can live next to the master file.
 * Save/export filename suggestions derived from front matter titles.
@@ -66,7 +66,8 @@ directives:
 Include paths may be absolute, use `~`, or be relative to the file that contains
 the directive. Included files may include more files. MacDown skips circular
 includes and inserts a warning in the generated Markdown when an include cannot
-be read.
+be read. When preview rendering is active, MacDown watches included files and
+re-renders the master document when an included source changes.
 
 For a book, keep each chapter in its own file and assemble them from a master:
 
